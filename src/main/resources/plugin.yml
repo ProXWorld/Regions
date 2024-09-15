@@ -1,0 +1,6 @@
+main: "net.proxworld.regions.RegionPlugin"
+name: "prox-regions"
+version: "${version}"
+
+api-version: 1.16
+depend: [ "prox-api", "WorldGuard", "DecentHolograms" ]
