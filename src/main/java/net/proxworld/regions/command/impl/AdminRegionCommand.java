@@ -8,6 +8,7 @@ import me.darkakyloff.api.model.APICommand;
 import me.darkakyloff.api.utils.PlayerUtils;
 import me.darkakyloff.api.utils.SoundUtils;
 import net.proxworld.regions.RegionPlugin;
+import net.proxworld.regions.config.locale.Message;
 import org.bukkit.command.CommandSender;
 
 import javax.swing.*;
@@ -34,7 +35,7 @@ public final class AdminRegionCommand extends APICommand {
         if (!PlayerUtils.hasPermission(commandSender, "proxregions.admin"))
             return false;
 
-        if (strings.length > 2) {
+        if (strings.length < 2) {
             SoundUtils.playErrorSound(commandSender);
             plugin.getGeneralConfig().findMessage("REGIONS_ADMIN_USE")
                     .ifPresent(message -> message.send(commandSender));

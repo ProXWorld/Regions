@@ -13,7 +13,6 @@ blocks:
     abilities:
       - "HIDDEN"
     flags: [ ]
-
 settings:
   # Формат регионов ({id} - айдишник региона)
   region-name-format: "region_block_{0}"
@@ -35,7 +34,8 @@ settings:
     lines:
       - "Регион {region}"
       - "Владелец: {owner}"
-
+limits:
+  default-limit: 1
 messages:
   region_create_error: "При создании региона возникла ошибка!"
   region_create_success: "Регион # успешно создан!"

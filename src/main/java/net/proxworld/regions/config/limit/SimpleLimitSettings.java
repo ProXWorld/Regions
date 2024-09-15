@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.val;
+import net.proxworld.regions.util.CountablePermission;
 import org.bukkit.entity.Player;
 
 import java.util.Map;
@@ -26,22 +27,6 @@ public final class SimpleLimitSettings implements LimitSettings {
 
     @Override
     public int getLimit(@NonNull Player player) {
-        // checking by permission proxregions.limit.<limit>
-        val permissions = player.getEffectivePermissions();
-
-        for (val permission : permissions) {
-            val name = permission.getPermission();
-
-            if (name.startsWith("proxregions.limit.")) {
-                val limit = name.substring("proxregions.limit.".length());
-
-                try {
-                    return Integer.parseInt(limit);
-                } catch (final NumberFormatException ignored) {
-                }
-            }
-        }
-
-        return defaultLimit;
+        return CountablePermission.maxAvailable(player, "proxregions.limit").orElse(Integer.MAX_VALUE);
     }
 }

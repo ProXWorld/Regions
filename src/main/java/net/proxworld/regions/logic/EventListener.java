@@ -262,6 +262,8 @@ public final class EventListener implements Listener {
         if (!block.hasMetadata("antiBreak")) return;
         if (!generalConfig.getAllowedWorlds().contains(player.getWorld().getName())) return;
 
+        event.setCancelled(true);
+
         val regionManager = plugin.getRegionManagerByPlayer(player.getWorld());
 
         val vector = BlockVector3.at(block.getX(), block.getY(), block.getZ());

@@ -93,10 +93,8 @@ public final class SimpleGeneralConfig implements GeneralConfig {
 
     @SuppressWarnings("ConstantConditions")
     private void _loadLimits() {
-        val section = configuration.getConfigurationSection("limits");
-        if (section == null) return;
+        val defaultLimit = configuration.getInt("limits.default-limit", 1);
 
-        val defaultLimit = section.getInt("default-limit", 1);
         limitSettings = SimpleLimitSettings.create(defaultLimit);
     }
 
