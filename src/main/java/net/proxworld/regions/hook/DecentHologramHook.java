@@ -44,7 +44,7 @@ public final class DecentHologramHook implements HologramHook {
 
         for (String s : text) {
             val line = new HologramLine(page, page.getNextLineLocation(), s);
-          //  line.setHeight(hologramSettings.getHeight());
+            line.setHeight(hologramSettings.getHeight());
 
             page.addLine(line);
         }
