@@ -17,7 +17,10 @@ import net.proxworld.regions.config.GeneralConfig;
 import net.proxworld.regions.config.locale.SimpleSingleMessage;
 import net.proxworld.regions.event.PlayerAddMemberRequestEvent;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+
+import java.util.Objects;
 
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -64,17 +67,25 @@ public final class RegionMenu extends AbstractMenuContents {
 
         val center = getCenterPoint(region.getMinimumPoint(), region.getMaximumPoint());
 
+        val ownerUuids = region.getOwners().getUniqueIds();
+        val membersCount = region.getMembers().size() + ownerUuids.size();
+
+        val owners = ownerUuids.stream()
+                .map(plugin.getServer()::getOfflinePlayer)
+                .map(OfflinePlayer::getName)
+                .filter(Objects::nonNull)
+                .reduce((s1, s2) -> s1 + ", " + s2)
+                .orElse("");
+
         inventory.set(slot(4, 2), Slot.builder()
                 .item(ItemNewBuilder.builder(Material.PAPER)
                         .setName(generalConfig.getMessage("REGION_MENU_INFO_ITEM")
                                 .asSingleLine())
                         .setLore(generalConfig.getMessage("REGION_MENU_INFO_LORE")
-                                .format("name", regionName, "members", region.getMembers().size(),
-                                        "owners", region.getOwners().size(),
-                                        "x", center.getX(), "y", center.getY(), "z", center.getZ())
+                                .format("name", regionName, "members", membersCount,
+                                        "owners", owners, "x", center.getX(), "y", center.getY(), "z", center.getZ())
                                 .getLines())
                         .build())
-                .onClick(type -> inventory.close())
                 .build());
 
         inventory.set(slot(6, 2), Slot.builder()

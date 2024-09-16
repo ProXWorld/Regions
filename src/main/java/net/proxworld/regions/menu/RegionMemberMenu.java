@@ -1,6 +1,8 @@
 package net.proxworld.regions.menu;
 
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import com.sk89q.worldguard.util.profile.Profile;
+import com.sk89q.worldguard.util.profile.cache.ProfileCache;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -15,20 +17,22 @@ import net.proxworld.regions.config.GeneralConfig;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public final class RegionMemberMenu extends PaginatedMenuContents<Pair<OfflinePlayer, RegionMemberMenu.PlayerRole>> {
+public final class RegionMemberMenu extends PaginatedMenuContents<Pair<UUID, RegionMemberMenu.PlayerRole>> {
 
     RegionPlugin plugin;
 
     GeneralConfig generalConfig;
+
+    ProfileCache profileCache;
 
     ProtectedRegion region;
 
@@ -37,9 +41,11 @@ public final class RegionMemberMenu extends PaginatedMenuContents<Pair<OfflinePl
             final @NonNull Player player,
             final @NonNull ProtectedRegion region
     ) {
+        val cache = plugin.getWorldGuard().getProfileCache();
+
         val title = plugin.getGeneralConfig().getMessage("REGION_MENU_MEMBERS_TITLE").asSingleLine();
 
-        val menu = SimpleMenu.create(new RegionMemberMenu(plugin, plugin.getGeneralConfig(), region), player, 6, title);
+        val menu = SimpleMenu.create(new RegionMemberMenu(plugin, plugin.getGeneralConfig(), cache, region), player, 6, title);
 
         menu.runUpdater(20);
         menu.open();
@@ -62,57 +68,54 @@ public final class RegionMemberMenu extends PaginatedMenuContents<Pair<OfflinePl
     }
 
     @Override
-    protected List<Pair<OfflinePlayer, PlayerRole>> getItems() {
-        val players = new ArrayList<Pair<OfflinePlayer, RegionMemberMenu.PlayerRole>>();
+    protected List<Pair<UUID, PlayerRole>> getItems() {
+        val players = new ArrayList<Pair<UUID, RegionMemberMenu.PlayerRole>>();
 
-        players.addAll(region.getOwners().getPlayerDomain().getUniqueIds()
-                .stream().map(b -> plugin.getServer().getOfflinePlayer(b))
+        players.addAll(region.getOwners().getPlayerDomain().getUniqueIds().stream()
                 .map(p -> ImmutablePair.of(p, RegionMemberMenu.PlayerRole.OWNER))
                 .toList());
 
-        players.addAll(region.getMembers().getPlayerDomain().getUniqueIds()
-                .stream().map(b -> plugin.getServer().getOfflinePlayer(b))
+        players.addAll(region.getMembers().getPlayerDomain().getUniqueIds().stream()
                 .map(p -> ImmutablePair.of(p, RegionMemberMenu.PlayerRole.MEMBER))
                 .toList());
 
-        // sorting by owner role
-        players.sort((a, b) -> {
-            if (a.getValue() == PlayerRole.OWNER) return -1;
-            if (b.getValue() == PlayerRole.OWNER) return 1;
-
-            return 0;
-        });
         return players;
     }
 
     @Override
-    protected void renderItem(int slot, Pair<OfflinePlayer, RegionMemberMenu.PlayerRole> pair) {
+    protected void renderItem(int slot, Pair<UUID, RegionMemberMenu.PlayerRole> pair) {
         val target = pair.getKey();
 
-        val role = pair.getValue();
+        System.out.println("target = " + target);
+        getProfileNameByCache(target).ifPresent(profile -> {
+            val role = pair.getValue();
 
-        val playerName = Optional.of(target)
-                        .map(OfflinePlayer::getName)
-                        .orElse(target.getUniqueId().toString());
+            val localizedRole = generalConfig.getMessage("REGION_MENU_ROLE_" + role.name())
+                    .asSingleLine();
 
-        inventory.set(slot, Slot.builder()
-                .item(ItemNewBuilder.builder(Material.PLAYER_HEAD)
-                        .setName(generalConfig.getMessage("REGION_MENU_MEMBER_ITEM")
-                                .format("player", playerName)
-                                .asSingleLine())
-                        .setLore(generalConfig.getMessage("REGION_MENU_MEMBER_LORE")
-                                .format("role", role.name().toLowerCase())
-                                .getLines())
-                        .build())
-                        .onClick(type -> {
-                            if (role == PlayerRole.OWNER) return;
+            inventory.set(slot, Slot.builder()
+                    .item(ItemNewBuilder.builder(Material.PLAYER_HEAD)
+                            .setName(profile.getName())
+                            //.format("player", profile.getName())
+                                 //   .asSingleLine())
+                            .setLore(generalConfig.getMessage("REGION_MENU_MEMBER_LORE")
+                                    .format("role", localizedRole)
+                                    .getLines())
+                            .build())
+                    .onClick(type -> {
+                        if (role == PlayerRole.OWNER) return;
 
-                            if (type.isRightClick()) {
-                                plugin.removePlayerToRegion(region, target);
-                                render();
-                            }
-                        })
-                .build());
+                        if (type.isRightClick()) {
+                            plugin.removePlayerToRegion(region, target);
+                            render();
+                        }
+                    })
+                    .build());
+        });
+    }
+
+    private @NonNull Optional<Profile> getProfileNameByCache(final @NonNull UUID uuid) {
+        return Optional.ofNullable(profileCache.getIfPresent(uuid));
     }
 
     protected enum PlayerRole {
