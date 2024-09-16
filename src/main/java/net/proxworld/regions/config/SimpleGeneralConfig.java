@@ -106,7 +106,6 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         val enabled = section.getBoolean("enabled", true);
         if (!enabled) return;
 
-        @SuppressWarnings("ConstantConditions")
         val height = section.getInt("height", 1);
 
         @SuppressWarnings("ConstantConditions")

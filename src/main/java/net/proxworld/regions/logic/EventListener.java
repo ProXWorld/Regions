@@ -167,9 +167,8 @@ public final class EventListener implements Listener {
                 return;
             }
 
-            val playerLimit = plugin.getGeneralConfig().getLimitSettings()
-                    .getLimit(player);
-
+            val playerLimit = plugin.getGeneralConfig()
+                    .getLimitSettings().getLimit(player);
             val regionsCount = plugin.getRegionCount(player);
 
             if (regionsCount >= playerLimit) {
