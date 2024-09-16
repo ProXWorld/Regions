@@ -2,7 +2,6 @@ package net.proxworld.regions;
 
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
-import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import lombok.NonNull;
 import net.proxworld.regions.block.RegionBlock;
@@ -10,7 +9,6 @@ import net.proxworld.regions.command.CommandManager;
 import net.proxworld.regions.config.GeneralConfig;
 import net.proxworld.regions.hook.HologramHook;
 import net.proxworld.regions.model.result.CreateResult;
-import net.proxworld.regions.player.PlayerManager;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -18,6 +16,7 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 import java.util.List;
+import java.util.UUID;
 
 public interface RegionsApi {
 
@@ -26,8 +25,6 @@ public interface RegionsApi {
     @NonNull WorldGuard getWorldGuard();
 
     @NonNull List<RegionBlock> getRegionBlocks();
-
-    @NonNull PlayerManager getPlayerManager();
 
     @NonNull CommandManager getCommandManager();
 
@@ -54,7 +51,7 @@ public interface RegionsApi {
             final @NonNull Location location, final @NonNull String regionName, final @NonNull OfflinePlayer player
     );
 
-    void removePlayerToRegion(final @NonNull ProtectedRegion region, final @NonNull OfflinePlayer player);
+    void removePlayerToRegion(final @NonNull ProtectedRegion region, final @NonNull UUID playerUUid);
 
     boolean isPlayerInRegion(final @NonNull Player player);
 

@@ -8,10 +8,13 @@ import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NonNull;
 import lombok.experimental.FieldDefaults;
+import lombok.val;
+import me.darkakyloff.api.menu.Menu;
+import me.darkakyloff.api.menu.SimpleMenu;
 import me.darkakyloff.api.utils.WorldGuardUtils;
 import net.proxworld.regions.block.RegionBlock;
 import net.proxworld.regions.command.CommandManager;
@@ -20,14 +23,15 @@ import net.proxworld.regions.command.impl.AdminRegionCommand;
 import net.proxworld.regions.command.impl.RegionsCommand;
 import net.proxworld.regions.config.GeneralConfig;
 import net.proxworld.regions.config.SimpleGeneralConfig;
-import net.proxworld.regions.database.RegionsDao;
 import net.proxworld.regions.hook.DecentHologramHook;
 import net.proxworld.regions.hook.EmptyHologramHook;
 import net.proxworld.regions.hook.HologramHook;
 import net.proxworld.regions.logic.EventListener;
+import net.proxworld.regions.menu.RegionMemberMenu;
+import net.proxworld.regions.menu.RegionMenu;
 import net.proxworld.regions.model.result.CreateResult;
-import net.proxworld.regions.player.PlayerManager;
-import net.proxworld.regions.player.impl.PlayerManagerImpl;
+import net.proxworld.regions.util.CountablePermission;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -35,16 +39,11 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.jdbi.v3.cache.caffeine.CaffeineCachePlugin;
-import org.jdbi.v3.core.Jdbi;
-import org.jdbi.v3.core.async.JdbiExecutor;
-import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Executors;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Getter
@@ -52,8 +51,6 @@ import java.util.concurrent.TimeUnit;
 public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
     GeneralConfig generalConfig;
-
-    PlayerManager playerManager;
 
     CommandManager commandManager;
 
@@ -65,8 +62,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     public void onLoad() {
         generalConfig = SimpleGeneralConfig.create(this);
         generalConfig.init();
-
-        playerManager = PlayerManagerImpl.create();
         commandManager = SimpleCommandManager.create();
 
         if (getServer().getPluginManager().isPluginEnabled("DecentHolograms")) {
@@ -81,6 +76,7 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
                 .expireAfterWrite(30, TimeUnit.SECONDS)
                 .build();
 
+        _loadHolograms();
       //  rmSqliteFile();
       //  _loadSqlite();
        // dao = RegionsDaoSQLite.class;
@@ -95,7 +91,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
             val regionManager = getRegionManagerByPlayer(w);
 
             for (val region : regionManager.getRegions().values()) {
-                // getting x y z by rg_X_Y_Z format
                 val name = region.getId();
 
                 val split = name.split("_");
@@ -124,7 +119,7 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
                 val owner = region.getOwners().getUniqueIds().stream()
                         .map(getServer()::getOfflinePlayer)
-                        .map(o -> o.getName())
+                        .map(OfflinePlayer::getName)
                         .findFirst()
                         .orElse("Unknown");
 
@@ -197,12 +192,34 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
         commandManager.registerCommand(RegionsCommand.create(this));
         commandManager.registerCommand(AdminRegionCommand.create(this));
+
+        CountablePermission.registerRange("proxregions.limit", 1, 100);
     }
 
     @Override
     public void onDisable() {
         commandManager.unregisterCommands();
         hologramHook.removeHolograms();
+
+        for (val player : Bukkit.getOnlinePlayers()) {
+            val holder = player.getOpenInventory()
+                    .getTopInventory().getHolder();
+
+            if (holder != null) {
+                if (holder instanceof Menu menu) {
+                    if (!(menu instanceof SimpleMenu simpleMenu)) continue;
+
+                    val contents = simpleMenu.getContents();
+
+                    if (contents instanceof RegionMemberMenu
+                            || contents instanceof RegionMenu) {
+                        menu.close();
+                    }
+                }
+            }
+        }
+
+        CountablePermission.unRegisterRange("proxregions.limit", 1, 100);
     }
 
     @Override
@@ -223,11 +240,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     @Override
     public @NonNull List<RegionBlock> getRegionBlocks() {
         return generalConfig.getRegionBlocks();
-    }
-
-    @Override
-    public @NonNull PlayerManager getPlayerManager() {
-        return playerManager;
     }
 
     @Override
@@ -309,8 +321,8 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     }
 
     @Override
-    public void removePlayerToRegion(final @NonNull ProtectedRegion region, @NonNull OfflinePlayer player) {
-        region.getMembers().removePlayer(player.getUniqueId());
+    public void removePlayerToRegion(final @NonNull ProtectedRegion region, @NonNull UUID playerUuid) {
+        region.getMembers().removePlayer(playerUuid);
     }
 
     @Override
