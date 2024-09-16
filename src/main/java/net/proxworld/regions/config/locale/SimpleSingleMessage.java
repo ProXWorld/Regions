@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
+import lombok.val;
 import org.bukkit.command.CommandSender;
 
 import java.util.Collections;
@@ -39,15 +40,17 @@ public class SimpleSingleMessage implements SingleMessage {
 
     @Override
     public @NonNull Message format(final @NonNull Object... args) {
+        String cloned = message;
+
         // format: PLACEHOLDER {x} -> args[0]
         for (int i = 0; i < args.length; i += 2) {
             if (args.length <= i + 1) break;
 
-            message = message.replace("{" + args[i] + "}",
+            cloned = cloned.replace("{" + args[i] + "}",
                     args[i + 1].toString());
         }
 
-        return SimpleSingleMessage.create(message);
+        return SimpleSingleMessage.create(cloned);
     }
 
     @Override

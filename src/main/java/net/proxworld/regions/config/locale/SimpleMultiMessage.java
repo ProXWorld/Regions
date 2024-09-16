@@ -7,6 +7,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.val;
 import org.bukkit.command.CommandSender;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
@@ -36,16 +37,18 @@ public class SimpleMultiMessage implements MultiMessage {
 
     @Override
     public @NonNull Message format(final @NonNull Object... args) {
-        for (int i = 0; i < lines.size(); i++) {
+        List<String> cloned = new ArrayList<>(lines);
+
+        for (int i = 0; i < cloned.size(); i++) {
             for (int j = 0; j < args.length; j += 2) {
                 if (args.length <= j + 1) break;
 
                 val value = args[j + 1].toString();
-                lines.set(i, lines.get(i).replaceAll("\\{" + args[j] + "}", value));
+                cloned.set(i, cloned.get(i).replaceAll("\\{" + args[j] + "}", value));
             }
         }
 
-        return SimpleMultiMessage.create(lines);
+        return SimpleMultiMessage.create(cloned);
     }
 
     @Override
