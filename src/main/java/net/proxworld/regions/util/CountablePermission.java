@@ -1,5 +1,6 @@
 package net.proxworld.regions.util;
 
+import com.google.common.base.Preconditions;
 import lombok.experimental.UtilityClass;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -10,23 +11,21 @@ import java.util.OptionalInt;
 import java.util.stream.IntStream;
 
 @UtilityClass
-public class CountablePermission
-{
-    public static void registerRange(String permissionPrefix, int min, int max) {
-        if (min < 1 || max < min) {
-            throw new IllegalArgumentException("Impossible range");
-        }
+public class CountablePermission {
+    public void registerRange(String permissionPrefix, int min, int max) {
+        //Preconditions.checkState(min  < 1 || max < min, "Impossible range");
+
         IntStream.rangeClosed(min, max)
                 .mapToObj(i -> new Permission(permissionPrefix + "." + i))
                 .forEach(Bukkit.getPluginManager()::addPermission);
+
         Bukkit.getPluginManager()
                 .addPermission(new Permission(permissionPrefix + ".*", PermissionDefault.OP));
     }
 
-    public static void unRegisterRange(String permissionPrefix, int min, int max) {
-        if (min < 1 || max < min) {
-            throw new IllegalArgumentException("Impossible range");
-        }
+    public void unRegisterRange(String permissionPrefix, int min, int max) {
+      //  Preconditions.checkState(min < 1 || max < min, "Impossible range");
+
         IntStream.rangeClosed(min, max)
                 .mapToObj(i -> permissionPrefix + "." + i)
                 .forEach(Bukkit.getPluginManager()::removePermission);
@@ -34,10 +33,10 @@ public class CountablePermission
                 .removePermission(permissionPrefix + ".*");
     }
 
-    public static OptionalInt maxAvailable(CommandSender sender, String permissionPrefix) {
-        if (sender.hasPermission(permissionPrefix + ".*")) {
+    public OptionalInt maxAvailable(CommandSender sender, String permissionPrefix) {
+        if (sender.hasPermission(permissionPrefix + ".*"))
             return OptionalInt.of(Integer.MAX_VALUE);
-        }
+
         return Bukkit.getPluginManager().getPermissions().stream()
                 .map(Permission::getName)
                 .filter(name -> name.startsWith(permissionPrefix) && sender.hasPermission(name))
