@@ -58,7 +58,6 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
-    @SuppressWarnings("deprecation")
     public void onAsyncChat(final AsyncPlayerChatEvent event) {
         val player = event.getPlayer();
 
@@ -182,7 +181,6 @@ public final class EventListener implements Listener {
 
             block.setMetadata("antiBreak", new FixedMetadataValue(plugin, regionName));
 
-            @SuppressWarnings("deprecation")
             val displayName = Optional.ofNullable(rgBlock.getItem().getItemMeta())
                     .map(ItemMeta::getDisplayName)
                     .orElse(rgBlock.getItem().getType().name());

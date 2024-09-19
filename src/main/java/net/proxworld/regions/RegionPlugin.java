@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -26,6 +27,7 @@ import net.proxworld.regions.config.SimpleGeneralConfig;
 import net.proxworld.regions.crafts.CustomCrafts;
 import net.proxworld.regions.crafts.SimpleCustomCrafts;
 import net.proxworld.regions.flags.RegionFlags;
+import net.proxworld.regions.flags.SimpleRegionFlags;
 import net.proxworld.regions.hook.DecentHologramHook;
 import net.proxworld.regions.hook.EmptyHologramHook;
 import net.proxworld.regions.hook.HologramHook;
@@ -60,6 +62,8 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
     CustomCrafts customCrafts;
 
+    RegionFlags regionFlags;
+
     @Override
     public void onLoad() {
         generalConfig = SimpleGeneralConfig.create(this);
@@ -69,6 +73,11 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
         customCrafts = SimpleCustomCrafts.create(this);
         customCrafts.registerCrafts();
+
+        regionFlags = SimpleRegionFlags.create(this);
+
+        regionFlags.registerFlag(new StateFlag("proxregions-greeting-message", false));
+        regionFlags.registerFlag(new StateFlag("proxregions-farewell-message", false));
 
         if (getServer().getPluginManager().isPluginEnabled("DecentHolograms")) {
             hologramHook = DecentHologramHook.create(this);
@@ -81,8 +90,18 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         playerCache = Caffeine.newBuilder()
                 .expireAfterWrite(30, TimeUnit.SECONDS)
                 .build();
+    }
 
-        _loadHolograms();
+    @Override
+    public void onEnable() {
+        getServer().getPluginManager()
+                .registerEvents(EventListener.create(this, generalConfig), this);
+
+        commandManager.registerCommand(RegionsCommand.create(this));
+        commandManager.registerCommand(GiveRegionCommand.create(this));
+
+        CountablePermission.registerRange("proxregions.limit", 1, 100);
+        getServer().getScheduler().runTaskAsynchronously(this, this::_loadHolograms);
     }
 
     private void _loadHolograms() {
@@ -118,7 +137,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
                 // заебалл то, что этот код спизжен с EventListener
                 // todo: сделать утилиту какую-то
-                @SuppressWarnings("deprecation")
                 val displayName = Optional.ofNullable(b.getItem().getItemMeta())
                         .map(ItemMeta::getDisplayName)
                         .orElse(b.getItem().getType().name());
@@ -143,37 +161,23 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     }
 
     @Override
-    @SuppressWarnings("ConstantConditions")
-    public void onEnable() {
-        getServer().getPluginManager()
-                .registerEvents(EventListener.create(this, generalConfig), this);
-
-        commandManager.registerCommand(RegionsCommand.create(this));
-        commandManager.registerCommand(GiveRegionCommand.create(this));
-
-        CountablePermission.registerRange("proxregions.limit", 1, 100);
-    }
-
-    @Override
     public void onDisable() {
         commandManager.unregisterCommands();
         hologramHook.removeHolograms();
+        regionFlags.removeFlags();
 
         for (val player : Bukkit.getOnlinePlayers()) {
             val holder = player.getOpenInventory()
                     .getTopInventory().getHolder();
 
-            if (holder != null) {
-                if (holder instanceof Menu menu) {
-                    if (!(menu instanceof SimpleMenu simpleMenu)) continue;
+            if (holder == null) continue;
+            if (!(holder instanceof Menu menu)) continue;
+            if (!(menu instanceof SimpleMenu simpleMenu)) continue;
 
-                    val contents = simpleMenu.getContents();
+            val contents = simpleMenu.getContents();
 
-                    if (contents instanceof RegionMemberMenu
-                            || contents instanceof RegionMenu) {
-                        menu.close();
-                    }
-                }
+            if (contents instanceof RegionMemberMenu || contents instanceof RegionMenu) {
+                menu.close();
             }
         }
 
