@@ -86,20 +86,15 @@ public final class RegionMemberMenu extends PaginatedMenuContents<Pair<UUID, Reg
     protected void renderItem(int slot, Pair<UUID, RegionMemberMenu.PlayerRole> pair) {
         val target = pair.getKey();
 
-        System.out.println("target = " + target);
         getProfileNameByCache(target).ifPresent(profile -> {
             val role = pair.getValue();
 
-            val localizedRole = generalConfig.getMessage("REGION_MENU_ROLE_" + role.name())
-                    .asSingleLine();
-
             inventory.set(slot, Slot.builder()
                     .item(ItemNewBuilder.builder(Material.PLAYER_HEAD)
-                            .setName(profile.getName())
-                            //.format("player", profile.getName())
-                                 //   .asSingleLine())
-                            .setLore(generalConfig.getMessage("REGION_MENU_MEMBER_LORE")
-                                    .format("role", localizedRole)
+                            .setName(generalConfig.getMessage("REGION_MENU_MEMBER_NAME")
+                                    .format("player", profile.getName())
+                                    .asSingleLine())
+                            .setLore(generalConfig.getMessage("REGION_MENU_ROLE_" + role.name())
                                     .getLines())
                             .build())
                     .onClick(type -> {
