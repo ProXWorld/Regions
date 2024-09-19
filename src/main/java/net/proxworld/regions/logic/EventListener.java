@@ -14,16 +14,19 @@ import net.proxworld.regions.menu.RegionMemberMenu;
 import net.proxworld.regions.menu.RegionMenu;
 import net.proxworld.regions.model.result.CreateResult;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.*;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,6 +58,7 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    @SuppressWarnings("deprecation")
     public void onAsyncChat(final AsyncPlayerChatEvent event) {
         val player = event.getPlayer();
 
@@ -104,12 +108,13 @@ public final class EventListener implements Listener {
         plugin.removePlayerFromCache(player);
 
         SoundUtils.playSuccessfulSound(player);
-        SoundUtils.playSuccessfulSound(target.getPlayer());
+        SoundUtils.playSuccessfulSound(target);
 
         generalConfig.findMessage("REGION_ADD_MEMBER_SUCCESS")
                 .ifPresent(msg -> msg.format("player", target.getName()).send(player));
         generalConfig.findMessage("REGION_ADD_MEMBER_SUCCESS_TARGET")
-                .ifPresent(msg -> msg.format("id", region.getId(), "player", player.getName())
+                .ifPresent(msg -> msg.format("id", region.getId())
+                        .format("player", player.getName())
                         .send(target));
 
         RegionMemberMenu.open(plugin, player, region);
@@ -117,8 +122,8 @@ public final class EventListener implements Listener {
 
     @EventHandler
     public void onPlaceRegion(final BlockPlaceEvent event) {
-        val type = event.getBlock().getType();
-        if (!generalConfig.isRegionBlock(type)) return;
+        val block = event.getBlock();
+        if (!generalConfig.isRegionBlock(block.getType())) return;
 
         val player = event.getPlayer();
         if (!generalConfig.isPlaceRegionBlockByShift() && player.isSneaking()) return;
@@ -130,7 +135,7 @@ public final class EventListener implements Listener {
 
         val regionManager = plugin.getRegionManagerByPlayer(player.getWorld());
 
-        val location = event.getBlock().getLocation();
+        val location = block.getLocation();
         val vector = BlockVector3.at(location.getX(), location.getY(), location.getZ());
 
         if (regionManager.getApplicableRegions(vector).size() > 0) {
@@ -142,16 +147,7 @@ public final class EventListener implements Listener {
 
         generalConfig.findRegionBlock(item).ifPresent(rgBlock -> {
             val regionName = generateRegionName(location);
-
-            val block = event.getBlockPlaced();
             val result = plugin.createRegion(regionName, player, rgBlock, location);
-
-            if (result == CreateResult.ERROR) {
-                event.setCancelled(true);
-                generalConfig.findMessage("REGION_CREATE_ERROR")
-                        .ifPresent(message -> message.send(player));
-                return;
-            }
 
             if (result == CreateResult.ALREADY_EXISTS) {
                 event.setCancelled(true);
@@ -160,9 +156,9 @@ public final class EventListener implements Listener {
                 return;
             }
 
-            if (result == CreateResult.DEFINED) {
+            if (result == CreateResult.OVERLAP) {
                 event.setCancelled(true);
-                generalConfig.findMessage("REGION_DEFINED_WITH_ANOTHER")
+                generalConfig.findMessage("REGION_OVERLAP_WITH_ANOTHER")
                         .ifPresent(message -> message.send(player));
                 return;
             }
@@ -186,6 +182,7 @@ public final class EventListener implements Listener {
 
             block.setMetadata("antiBreak", new FixedMetadataValue(plugin, regionName));
 
+            @SuppressWarnings("deprecation")
             val displayName = Optional.ofNullable(rgBlock.getItem().getItemMeta())
                     .map(ItemMeta::getDisplayName)
                     .orElse(rgBlock.getItem().getType().name());
@@ -194,7 +191,9 @@ public final class EventListener implements Listener {
                     plugin.getHologramHook().addHologram(
                             regionName, centered.clone().add(0, 2, 0),
                             generalConfig.getHologramSettings().getMessage()
-                                    .format("type", displayName, "size", rgBlock.getSize(), "owner", player.getName())
+                                    .format("type", displayName)
+                                    .format("size", rgBlock.getSize())
+                                    .format("owner", player.getName())
                                     .getLines()
                     ));
 
@@ -332,12 +331,17 @@ public final class EventListener implements Listener {
         return blocks.stream().anyMatch(this::checkRgBlock);
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onBlockExplode(final BlockExplodeEvent event) {
-        val blocks = event.blockList();
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    public void onEntityExplode(final EntityExplodeEvent event) {
+        val world = event.getLocation().getWorld();
+        if (world == null) return;
+        if (!generalConfig.getAllowedWorlds().contains(world.getName())) return;
 
-        // plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
-        blocks.forEach(block -> {
+        checkExplode(event.blockList());
+    }
+
+    private void checkExplode(final @NonNull List<Block> blocks) {
+        new ArrayList<>(blocks).forEach(block -> {
             val type = block.getType();
 
             if (!generalConfig.isRegionBlock(type)) return;
@@ -347,13 +351,29 @@ public final class EventListener implements Listener {
                 plugin.destroyRegion(block);
                 block.removeMetadata("antiBreak", plugin);
 
-                plugin.getHologramHook()
-                        .removeHologram(generateRegionName(block.getLocation()));
-                block.getWorld().dropItem(block.getLocation(), rgBlock.getItem());
+                val loc = block.getLocation();
 
-                event.blockList().remove(block);
+                plugin.getHologramHook()
+                        .removeHologram(generateRegionName(loc));
+
+                block.setType(Material.AIR);
+                block.getWorld().dropItem(loc, rgBlock.getItem());
+
+                blocks.remove(block);
             });
         });
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(final BlockExplodeEvent event) {
+        val block = event.getBlock();
+        val world = block.getWorld();
+        if (!generalConfig.getAllowedWorlds().contains(world.getName())) return;
+
+        // plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
+        val blocks = event.blockList();
+        checkExplode(blocks);
+        // );
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
@@ -383,6 +403,8 @@ public final class EventListener implements Listener {
                     .removeHologram(generateRegionName(event.getBlock().getLocation()));
             generalConfig.findMessage("REGION_DESTROYED")
                     .ifPresent(message -> message.send(player));
+
+            plugin.removePlayerFromCache(player);
 
             event.setDropItems(false);
             player.getInventory().addItem(rgBlock.getItem());
