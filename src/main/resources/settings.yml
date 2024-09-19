@@ -8,14 +8,8 @@ blocks:
       - "HIDDEN"
     flags: [ ]
 settings:
-  # Формат регионов ({id} - айдишник региона)
-  region-name-format: "region_block_{0}"
-
   # Включить ли молнию при создании
   lightning-on-create: true
-
-  # Включить ли взрыв регионов
-  region-explosion: true
 
   allowed-worlds:
     - "world"
@@ -32,9 +26,6 @@ settings:
     lines:
       - "Регион {region}"
       - "Владелец: {owner}"
+
 limits:
   default-limit: 1
-messages:
-  region_create_error: "При создании региона возникла ошибка!"
-  region_create_success: "Регион # успешно создан!"
-  region_already_exists: "Ваш регион пересекается с другим!"
