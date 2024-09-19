@@ -18,7 +18,9 @@ public class SimpleRegionBlock implements RegionBlock {
 
     String key;
 
-    ItemStack itemStack;
+    ItemStack item;
+
+    boolean onlyCrafting;
 
     int size;
 
@@ -26,29 +28,14 @@ public class SimpleRegionBlock implements RegionBlock {
 
     public static @NonNull SimpleRegionBlock create(
             final @NonNull String key, final @NonNull ItemStack itemStack, final int size,
-            final @NonNull List<Pair<StateFlag, Boolean>> flags
+            final boolean onlyCrafting, final @NonNull List<Pair<StateFlag, Boolean>> flags
     ) {
-        return new SimpleRegionBlock(key, itemStack, size, flags);
+        return new SimpleRegionBlock(key, itemStack, onlyCrafting, size, flags);
     }
 
     @Override
-    public @NonNull String getKey() {
-        return key;
-    }
-
-    @Override
-    public @NonNull ItemStack getItem() {
-        return itemStack;
-    }
-
-    @Override
-    public int getSize() {
-        return size;
-    }
-
-    @Override
-    public @NonNull List<Pair<StateFlag, Boolean>> getFlags() {
-        return flags;
+    public boolean onlyCrafting() {
+        return onlyCrafting;
     }
 
 }
