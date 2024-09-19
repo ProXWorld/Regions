@@ -13,16 +13,19 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.FieldDefaults;
 import lombok.val;
+import me.darkakyloff.api.JavaMain;
 import me.darkakyloff.api.menu.Menu;
 import me.darkakyloff.api.menu.SimpleMenu;
 import me.darkakyloff.api.utils.WorldGuardUtils;
 import net.proxworld.regions.block.RegionBlock;
 import net.proxworld.regions.command.CommandManager;
 import net.proxworld.regions.command.SimpleCommandManager;
-import net.proxworld.regions.command.impl.AdminRegionCommand;
+import net.proxworld.regions.command.impl.GiveRegionCommand;
 import net.proxworld.regions.command.impl.RegionsCommand;
 import net.proxworld.regions.config.GeneralConfig;
 import net.proxworld.regions.config.SimpleGeneralConfig;
+import net.proxworld.regions.crafts.CustomCrafts;
+import net.proxworld.regions.crafts.SimpleCustomCrafts;
 import net.proxworld.regions.hook.DecentHologramHook;
 import net.proxworld.regions.hook.EmptyHologramHook;
 import net.proxworld.regions.hook.HologramHook;
@@ -36,10 +39,11 @@ import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.command.defaults.BukkitCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,13 +60,17 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
     HologramHook hologramHook;
 
-    boolean testMode = false;
+    CustomCrafts customCrafts;
 
     @Override
     public void onLoad() {
         generalConfig = SimpleGeneralConfig.create(this);
         generalConfig.init();
+
         commandManager = SimpleCommandManager.create();
+
+        customCrafts = SimpleCustomCrafts.create(this);
+        customCrafts.registerCrafts();
 
         if (getServer().getPluginManager().isPluginEnabled("DecentHolograms")) {
             hologramHook = DecentHologramHook.create(this);
@@ -77,9 +85,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
                 .build();
 
         _loadHolograms();
-      //  rmSqliteFile();
-      //  _loadSqlite();
-       // dao = RegionsDaoSQLite.class;
     }
 
     private void _loadHolograms() {
@@ -113,10 +118,14 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
                 val b = rgBlock.get();
 
+                // заебалл то, что этот код спизжен с EventListener
+                // todo: сделать утилиту какую-то
+                @SuppressWarnings("deprecation")
                 val displayName = Optional.ofNullable(b.getItem().getItemMeta())
                         .map(ItemMeta::getDisplayName)
                         .orElse(b.getItem().getType().name());
 
+                @SuppressWarnings("ConstantConditions")
                 val owner = region.getOwners().getUniqueIds().stream()
                         .map(getServer()::getOfflinePlayer)
                         .map(OfflinePlayer::getName)
@@ -126,72 +135,23 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
                 hologramHook.addHologram(
                         name, loc.clone().add(0.5, 2, 0.5),
                         generalConfig.getHologramSettings().getMessage()
-                                .format("type", displayName, "size", b.getSize(), "owner", owner)
+                                .format("type", displayName)
+                                .format("size", b.getSize())
+                                .format("owner", owner)
                                 .getLines()
                 );
-
-               /* hologramHook.addHologram(
-                        name, loc.clone().add(0.5, 2, 0.5),
-                        generalConfig.getHologramSettings().getMessage()
-                                .format("type", displayName, "size", rgBlock.getSize(), "owner", player.getName())
-                                .getLines()
-                )); */
             }
         }
     }
-
-   /* Class<? extends RegionsDao> dao;
-
-    Jdbi jdbi;
-
-    JdbiExecutor executor;
-
-    private void _loadSqlite() {
-        val source = getHikariDataSource();
-
-        jdbi = Jdbi.create(source);
-        jdbi.installPlugin(new SqlObjectPlugin());
-        jdbi.installPlugin(new CaffeineCachePlugin());
-
-        try (val input = getClass().getResourceAsStream("/schema.sql")) {
-            if (input != null) {
-                jdbi.useHandle((handle) -> handle.createScript(new String(input.readAllBytes()))
-                        .execute());
-            }
-        } catch (final Exception e) {
-            getLogger().severe("Failed to load schema.sql");
-            return;
-        }
-
-        executor = JdbiExecutor.create(jdbi, Executors.newFixedThreadPool(2));
-    }
-
-    @NotNull
-    @SneakyThrows
-    @SuppressWarnings("ResultOfMethodCallIgnored")
-    private HikariDataSource getHikariDataSource() {
-        val file = new File(getDataFolder(), "regions.db");
-
-        if (!file.exists()) {
-            file.createNewFile();
-        }
-
-        val config = new HikariConfig();
-        config.setDriverClassName("org.sqlite.JDBC");
-
-        config.setConnectionTestQuery("SELECT 1");
-        config.setJdbcUrl("jdbc:sqlite:" + file);
-
-        return new HikariDataSource(config);
-    } */
 
     @Override
+    @SuppressWarnings("ConstantConditions")
     public void onEnable() {
         getServer().getPluginManager()
                 .registerEvents(EventListener.create(this, generalConfig), this);
 
         commandManager.registerCommand(RegionsCommand.create(this));
-        commandManager.registerCommand(AdminRegionCommand.create(this));
+        commandManager.registerCommand(GiveRegionCommand.create(this));
 
         CountablePermission.registerRange("proxregions.limit", 1, 100);
     }
@@ -223,16 +183,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     }
 
     @Override
-    public @NonNull HologramHook getHologramHook() {
-        return hologramHook;
-    }
-
-    @Override
-    public @NonNull GeneralConfig getGeneralConfig() {
-        return generalConfig;
-    }
-
-    @Override
     public @NonNull WorldGuard getWorldGuard() {
         return WorldGuard.getInstance();
     }
@@ -243,29 +193,25 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
     }
 
     @Override
-    public @NotNull CommandManager getCommandManager() {
-        return commandManager;
-    }
-
-    @Override
     public @NonNull CreateResult createRegion(
             final @NonNull String name, final @NonNull Player player,
             final @NonNull RegionBlock block, final @NonNull Location location
     ) {
+        val regionManager = getRegionManagerByPlayer(player.getWorld());
+        if (regionManager.hasRegion(name))
+            return CreateResult.ALREADY_EXISTS;
+
+        val size = block.getSize();
+
         val blockX = location.getBlockX();
         val blockY = location.getBlockY();
         val blockZ = location.getBlockZ();
 
-        val regionManager = getRegionManagerByPlayer(player.getWorld());
-        if (regionManager.hasRegion(name)) return CreateResult.ALREADY_EXISTS;
-
-        val size = block.getSize();
+        if (isRegionExists(location.getWorld(), blockX, blockY, blockZ, size))
+            return CreateResult.OVERLAP;
 
         val min = BlockVector3.at(blockX - size, blockY - size, blockZ - size);
         val max = BlockVector3.at(blockX + size, blockY + size, blockZ + size);
-
-        if (regionManager.getApplicableRegions(min).size() > 0) return CreateResult.DEFINED;
-        if (regionManager.getApplicableRegions(max).size() > 0) return CreateResult.DEFINED;
 
         val region = new ProtectedCuboidRegion(name, min, max);
 
@@ -273,6 +219,24 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         regionManager.addRegion(region);
 
         return CreateResult.SUCCESS;
+    }
+
+    private boolean isRegionExists(
+            final @NonNull World world, final int blockX,
+            final int blockY, final int blockZ, final int size
+    ) {
+        for (int x = blockX - size; x <= blockX + size; x++) {
+            for (int y = blockY - size; y <= blockY + size; y++) {
+                for (int z = blockZ - size; z <= blockZ + size; z++) {
+                    val regions = getRegionManagerByPlayer(world)
+                            .getApplicableRegions(BlockVector3.at(x, y, z));
+
+                    if (!regions.getRegions().isEmpty()) return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -298,7 +262,6 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         val blockZ = location.getBlockZ();
 
         val name = "rg_" + blockX + "_" + blockY + "_" + blockZ;
-
         if (!regionManager.hasRegion(name)) return false;
 
         regionManager.removeRegion(name);
