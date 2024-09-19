@@ -137,6 +137,7 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
                 // заебалл то, что этот код спизжен с EventListener
                 // todo: сделать утилиту какую-то
+                @SuppressWarnings("deprecation")
                 val displayName = Optional.ofNullable(b.getItem().getItemMeta())
                         .map(ItemMeta::getDisplayName)
                         .orElse(b.getItem().getType().name());
@@ -306,7 +307,7 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         return region.getOwners().contains(player.getUniqueId());
     }
 
-    Cache<Player, ProtectedRegion> playerCache;
+    Cache<@NonNull Player, @NonNull ProtectedRegion> playerCache;
 
     @Override
     public void addPlayerToCache(@NonNull Player player, @NonNull ProtectedRegion region) {
