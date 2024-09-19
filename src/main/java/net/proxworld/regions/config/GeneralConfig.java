@@ -37,21 +37,15 @@ public interface GeneralConfig {
 
     @NonNull Optional<RegionBlock> findRegionBlock(final @NonNull ItemStack itemStack);
 
-    default @NonNull Optional<RegionBlock> findRegionBlock(final @NonNull Material material) {
-        return findRegionBlock(new ItemStack(material));
-    }
+    @NonNull Optional<RegionBlock> findRegionBlock(final @NonNull Material material);
 
     boolean isLightningOnCreate();
-
-    boolean isRegionExplosion();
 
     boolean isPlaceRegionBlockByShift();
 
     @NonNull HologramSettings getHologramSettings();
 
     @NonNull LimitSettings getLimitSettings();
-
-    @NonNull SingleMessage getRegionNameFormat();
 
     void init();
 

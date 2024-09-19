@@ -1,6 +1,5 @@
 package net.proxworld.regions.config;
 
-import com.sk89q.worldguard.protection.flags.StateFlag;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +21,6 @@ import net.proxworld.regions.config.locale.Message;
 import net.proxworld.regions.config.locale.SimpleMultiMessage;
 import net.proxworld.regions.config.locale.SimpleSingleMessage;
 import net.proxworld.regions.config.locale.SingleMessage;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -32,7 +29,10 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Unmodifiable;
 
 import java.io.File;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 
@@ -79,12 +79,7 @@ public final class SimpleGeneralConfig implements GeneralConfig {
 
         allowedWorlds = section.getStringList("allowed-worlds");
 
-        regionNameFormat = SimpleSingleMessage.create(section.getString("region-name-format",
-                "&7Region &e%region%"));
-
         isLightningOnCreate = section.getBoolean("lightning-on-create", true);
-
-        isRegionExplosion = section.getBoolean("region-explosion", true);
 
         isPlaceRegionBlockByShift = section.getBoolean("place-region-block-by-shift", true);
 
@@ -132,7 +127,15 @@ public final class SimpleGeneralConfig implements GeneralConfig {
     @Override
     public boolean isRegionBlock(@NonNull ItemStack itemStack) {
         return regionBlocks.stream()
-                .anyMatch(regionBlock -> regionBlock.getItem().isSimilar(itemStack));
+                .anyMatch(regionBlock -> {
+                    val item = regionBlock.getItem();
+
+                    //if (regionBlock.onlyCrafting())
+                     //   return item.isSimilar(itemStack);
+
+                    return isRegionBlock(itemStack.getType());
+                    //regionBlock.getItem().isSimilar(itemStack)
+                });
     }
 
     @Override
@@ -144,8 +147,24 @@ public final class SimpleGeneralConfig implements GeneralConfig {
 
     @Override
     public @NonNull Optional<RegionBlock> findRegionBlock(@NonNull ItemStack itemStack) {
+        return regionBlocks.stream()
+                .filter(regionBlock -> {
+                    val item = regionBlock.getItem();
+                    //if (regionBlock.onlyCrafting())
+                        return item.isSimilar(itemStack);
+
+                   // return isRegionBlock(itemStack.getType());
+                })
+                .findFirst();
+    }
+
+    @Override
+    public @NonNull Optional<RegionBlock> findRegionBlock(@NonNull Material material) {
         return regionBlocks.stream() // todo isSimular
-                //     .filter(regionBlock -> itemStack.getType().name().endsWith(regionBlock.getItem().getType().name()))
+                .filter(regionBlock -> {
+                    val itemType = regionBlock.getItem().getType();
+                    return material.name().endsWith(itemType.name());
+                })
                 .findFirst();
     }
 
@@ -155,14 +174,6 @@ public final class SimpleGeneralConfig implements GeneralConfig {
     @Override
     public boolean isLightningOnCreate() {
         return isLightningOnCreate;
-    }
-
-    @NonFinal
-    boolean isRegionExplosion;
-
-    @Override
-    public boolean isRegionExplosion() {
-        return isRegionExplosion;
     }
 
     @NonFinal
@@ -189,14 +200,6 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         return limitSettings;
     }
 
-    @NonFinal
-    SingleMessage regionNameFormat;
-
-    @Override
-    public @NonNull SingleMessage getRegionNameFormat() {
-        return regionNameFormat;
-    }
-
     @SuppressWarnings("ConstantConditions")
     private void _loadRegionBlocks() {
         val section = configuration.getConfigurationSection("blocks");
@@ -214,17 +217,22 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         val itemSection = section.getConfigurationSection("item");
         val size = section.getInt("size", 1);
 
-        val flagRegistry = plugin.getWorldGuard()
-                .getFlagRegistry();
+        //val recipe = getRecipe(section)
+        //        .orElse(null);
 
-       /* List<Pair<StateFlag, Boolean>> flags = section.getConfigurationSection("flags")
-                .getKeys(false).stream()
-                .map(flag -> ImmutablePair.of(flagRegistry.get(flag), section.getBoolean(flag, false)))
-                .toList(); */
+        boolean onlyCrafting = section.getBoolean("not-crafting", false);
 
         return SimpleRegionBlock.create(
-                key, _loadItem(itemSection), size, Collections.emptyList()
+                key, _loadItem(itemSection), size, onlyCrafting, Collections.emptyList()
         );
+    }
+
+    private @NonNull Optional<String[]> getRecipe(final @NonNull ConfigurationSection section) {
+        if (section.contains("recipe")) {
+            return Optional.of(section.getStringList("recipe").toArray(new String[0]));
+        }
+
+        return Optional.empty();
     }
 
     @SuppressWarnings("ConstantConditions")
