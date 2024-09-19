@@ -13,6 +13,8 @@ public interface RegionBlock {
 
     @NonNull ItemStack getItem();
 
+    boolean onlyCrafting();
+
     int getSize();
 
     @NonNull List<Pair<StateFlag, Boolean>> getFlags();
