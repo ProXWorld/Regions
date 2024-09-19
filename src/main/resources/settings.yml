@@ -1,9 +1,3 @@
-allowed-worlds:
-  - "world"
-  - "world_nether"
-
-database:
-
 blocks:
   1:
     item:
@@ -22,6 +16,10 @@ settings:
 
   # Включить ли взрыв регионов
   region-explosion: true
+
+  allowed-worlds:
+    - "world"
+    - "world_nether"
 
   # Включить ли то, если ставить блок на ШИФТе
   # то он будет ставиться как обычный блок
