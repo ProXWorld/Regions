@@ -9,6 +9,7 @@ import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import com.sk89q.worldguard.session.handler.Handler;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
@@ -28,6 +29,8 @@ import net.proxworld.regions.crafts.CustomCrafts;
 import net.proxworld.regions.crafts.SimpleCustomCrafts;
 import net.proxworld.regions.flags.RegionFlags;
 import net.proxworld.regions.flags.SimpleRegionFlags;
+import net.proxworld.regions.handler.impl.FarewellHandler;
+import net.proxworld.regions.handler.impl.GreetingHandler;
 import net.proxworld.regions.hook.DecentHologramHook;
 import net.proxworld.regions.hook.EmptyHologramHook;
 import net.proxworld.regions.hook.HologramHook;
@@ -43,11 +46,10 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @Getter
@@ -64,13 +66,10 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
     RegionFlags regionFlags;
 
+    HashSet<Handler.Factory<?>> handlers;
+
     @Override
     public void onLoad() {
-        generalConfig = SimpleGeneralConfig.create(this);
-        generalConfig.init();
-
-        commandManager = SimpleCommandManager.create();
-
         customCrafts = SimpleCustomCrafts.create(this);
         customCrafts.registerCrafts();
 
@@ -79,6 +78,31 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         regionFlags.registerFlag(new StateFlag("proxregions-greeting-message", false));
         regionFlags.registerFlag(new StateFlag("proxregions-farewell-message", false));
 
+        playerCache = Caffeine.newBuilder()
+                .expireAfterWrite(30, TimeUnit.SECONDS)
+                .build();
+    }
+
+    private void _registerFlagHandlers() {
+        val sessionManager = getWorldGuard().getPlatform().getSessionManager();
+
+        handlers = new HashSet<>();
+
+        handlers.add(GreetingHandler.Factory.create(this));
+        handlers.add(FarewellHandler.Factory.create(this));
+
+        for (Handler.Factory<?> handler : handlers) {
+            sessionManager.registerHandler(handler, null);
+        }
+    }
+
+    @Override
+    public void onEnable() {
+        generalConfig = SimpleGeneralConfig.create(this);
+        generalConfig.init();
+
+        commandManager = SimpleCommandManager.create();
+ 
         if (getServer().getPluginManager().isPluginEnabled("DecentHolograms")) {
             hologramHook = DecentHologramHook.create(this);
             getLogger().info("DecentHolograms found, using DecentHologramHook");
@@ -87,24 +111,19 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
             getLogger().warning("DecentHolograms not found, using EmptyHologramHook");
         }
 
-        playerCache = Caffeine.newBuilder()
-                .expireAfterWrite(30, TimeUnit.SECONDS)
-                .build();
-    }
-
-    @Override
-    public void onEnable() {
         getServer().getPluginManager()
                 .registerEvents(EventListener.create(this, generalConfig), this);
+
+        _registerFlagHandlers();
 
         commandManager.registerCommand(RegionsCommand.create(this));
         commandManager.registerCommand(GiveRegionCommand.create(this));
 
         CountablePermission.registerRange("proxregions.limit", 1, 100);
-        getServer().getScheduler().runTaskAsynchronously(this, this::_loadHolograms);
+        getServer().getScheduler().runTaskAsynchronously(this, this::_loadBlocks);
     }
 
-    private void _loadHolograms() {
+    private void _loadBlocks() {
         for (val world : generalConfig.getAllowedWorlds()) {
             val w = getServer().getWorld(world);
 
@@ -114,22 +133,22 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
             for (val region : regionManager.getRegions().values()) {
                 val name = region.getId();
-
                 val split = name.split("_");
 
                 if (split.length != 4) continue;
 
                 val x = Integer.parseInt(split[1]);
-
                 val y = Integer.parseInt(split[2]);
-
                 val z = Integer.parseInt(split[3]);
 
                 val block = w.getBlockAt(x, y, z);
 
                 val rgBlock = generalConfig.findRegionBlock(block.getType());
-
                 if (rgBlock.isEmpty()) continue;
+
+                getServer().getScheduler().runTask(this, () ->
+                        block.setMetadata("antiBreak", new FixedMetadataValue(this, name))
+                );
 
                 val loc = new Location(w, x, y, z);
 
@@ -167,6 +186,8 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         hologramHook.removeHolograms();
         regionFlags.removeFlags();
 
+        _unregisterHandlers();
+
         for (val player : Bukkit.getOnlinePlayers()) {
             val holder = player.getOpenInventory()
                     .getTopInventory().getHolder();
@@ -183,6 +204,16 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         }
 
         CountablePermission.unRegisterRange("proxregions.limit", 1, 100);
+    }
+
+    private void _unregisterHandlers() {
+        val sessionManager = getWorldGuard().getPlatform().getSessionManager();
+
+        for (Handler.Factory<?> handler : handlers) {
+            sessionManager.unregisterHandler(handler);
+        }
+
+        handlers.clear();
     }
 
     @Override
@@ -220,6 +251,9 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
         val region = new ProtectedCuboidRegion(name, min, max);
 
         region.getOwners().addPlayer(player.getUniqueId());
+        getRegionFlags().getFlags()
+                .forEach(flag -> region.setFlag(flag, StateFlag.State.ALLOW));
+
         regionManager.addRegion(region);
 
         return CreateResult.SUCCESS;
@@ -245,7 +279,12 @@ public final class RegionPlugin extends JavaPlugin implements RegionsApi {
 
     @Override
     public int getRegionCount(@NonNull Player player) {
-        return getRegionManagerByPlayer(player.getWorld()).getRegions().size();
+        return (int) getRegionManagerByPlayer(player.getWorld())
+                .getRegions().values().stream()
+                .filter(region -> region.getId().startsWith("rg_"))
+                .filter(region -> region.getOwners().contains(player.getUniqueId()))
+                .count();
+     //   return getRegionManagerByPlayer(player.getWorld()).getRegions().size();
     }
 
     @Override

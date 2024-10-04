@@ -10,6 +10,7 @@ import me.darkakyloff.api.JavaMain;
 import me.darkakyloff.api.utils.ConfigUtils;
 import me.darkakyloff.api.utils.ItemNewBuilder;
 import me.darkakyloff.api.utils.MessageUtils;
+import me.darkakyloff.items.ItemManager;
 import net.proxworld.regions.RegionPlugin;
 import net.proxworld.regions.block.RegionBlock;
 import net.proxworld.regions.block.SimpleRegionBlock;
@@ -20,12 +21,12 @@ import net.proxworld.regions.config.limit.SimpleLimitSettings;
 import net.proxworld.regions.config.locale.Message;
 import net.proxworld.regions.config.locale.SimpleMultiMessage;
 import net.proxworld.regions.config.locale.SimpleSingleMessage;
-import net.proxworld.regions.config.locale.SingleMessage;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
 
 import java.io.File;
@@ -62,6 +63,14 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         return allowedWorlds;
     }
 
+    @NonFinal
+    ItemStack enderChestItem;
+
+    @Override
+    public @Nullable ItemStack getEnderChestItem() {
+        return enderChestItem;
+    }
+
     @Override
     public void init() {
         ConfigUtils.createConfigFile(plugin, "settings.yml");
@@ -78,12 +87,17 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         if (section == null) return;
 
         allowedWorlds = section.getStringList("allowed-worlds");
-
-        isLightningOnCreate = section.getBoolean("lightning-on-create", true);
-
         isPlaceRegionBlockByShift = section.getBoolean("place-region-block-by-shift", true);
 
+        _loadEnderChestItem(section);
         _loadHolograms(section);
+    }
+
+    private void _loadEnderChestItem(final @NonNull ConfigurationSection section) {
+        val name = section.getString("ender-chest-item-id", "ec");
+        if (!ItemManager.itemIsExist(name)) return;
+
+        enderChestItem = ItemManager.getCustomItem(name, 1);
     }
 
     @SuppressWarnings("ConstantConditions")
@@ -126,16 +140,7 @@ public final class SimpleGeneralConfig implements GeneralConfig {
 
     @Override
     public boolean isRegionBlock(@NonNull ItemStack itemStack) {
-        return regionBlocks.stream()
-                .anyMatch(regionBlock -> {
-                    val item = regionBlock.getItem();
-
-                    //if (regionBlock.onlyCrafting())
-                     //   return item.isSimilar(itemStack);
-
-                    return isRegionBlock(itemStack.getType());
-                    //regionBlock.getItem().isSimilar(itemStack)
-                });
+        return findRegionBlock(itemStack).isPresent();
     }
 
     @Override
@@ -150,10 +155,14 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         return regionBlocks.stream()
                 .filter(regionBlock -> {
                     val item = regionBlock.getItem();
-                    //if (regionBlock.onlyCrafting())
-                        return item.isSimilar(itemStack);
 
-                   // return isRegionBlock(itemStack.getType());
+                    if (item.getType() == itemStack.getType()) {
+                        if (regionBlock.isOnlyGive()) return item.isSimilar(itemStack);
+
+                        return true;
+                    }
+
+                    return false;
                 })
                 .findFirst();
     }
@@ -166,14 +175,6 @@ public final class SimpleGeneralConfig implements GeneralConfig {
                     return material.name().endsWith(itemType.name());
                 })
                 .findFirst();
-    }
-
-    @NonFinal
-    boolean isLightningOnCreate;
-
-    @Override
-    public boolean isLightningOnCreate() {
-        return isLightningOnCreate;
     }
 
     @NonFinal
@@ -220,10 +221,12 @@ public final class SimpleGeneralConfig implements GeneralConfig {
         //val recipe = getRecipe(section)
         //        .orElse(null);
 
-        boolean onlyCrafting = section.getBoolean("not-crafting", false);
+        val exploding = section.getBoolean("exploding", true);
+
+        val give = section.getBoolean("only-give", false);
 
         return SimpleRegionBlock.create(
-                key, _loadItem(itemSection), size, onlyCrafting, Collections.emptyList()
+                key, _loadItem(itemSection), size, exploding, give, Collections.emptyList()
         );
     }
 

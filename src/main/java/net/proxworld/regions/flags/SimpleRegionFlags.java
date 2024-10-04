@@ -10,7 +10,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import net.proxworld.regions.RegionPlugin;
+import org.jetbrains.annotations.Unmodifiable;
 
+import java.util.Collection;
 import java.util.Optional;
 
 @Getter
@@ -27,11 +29,16 @@ public final class SimpleRegionFlags implements RegionFlags {
     }
 
     @Override
+    public @Unmodifiable @NonNull Collection<StateFlag> getFlags() {
+        return flags.values();
+    }
+
+    @Override
     public void registerFlag(@NonNull StateFlag flag) {
         try {
             plugin.getWorldGuard().getFlagRegistry()
                     .register(flag);
-        } catch (final FlagConflictException e) {
+        } catch (final FlagConflictException | IllegalStateException exception) {
             // fix ebaniy plugman
             plugin.getSLF4JLogger().error("Failed to register flag: " + flag.getName());
             return;

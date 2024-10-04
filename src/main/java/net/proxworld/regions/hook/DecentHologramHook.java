@@ -2,7 +2,6 @@ package net.proxworld.regions.hook;
 
 import com.google.common.collect.Maps;
 import eu.decentsoftware.holograms.api.DHAPI;
-import eu.decentsoftware.holograms.api.DecentHologramsAPI;
 import eu.decentsoftware.holograms.api.holograms.Hologram;
 import eu.decentsoftware.holograms.api.holograms.HologramLine;
 import lombok.AccessLevel;
@@ -39,7 +38,7 @@ public final class DecentHologramHook implements HologramHook {
             return;
         }
 
-        val hologram = new Hologram(key, location);
+        val hologram = new Hologram(key, location, false);
         val page = hologram.getPage(0);
 
         for (String s : text) {

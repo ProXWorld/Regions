@@ -13,7 +13,9 @@ public interface RegionBlock {
 
     @NonNull ItemStack getItem();
 
-    boolean onlyCrafting();
+    boolean isExploding();
+
+    boolean isOnlyGive();
 
     int getSize();
 

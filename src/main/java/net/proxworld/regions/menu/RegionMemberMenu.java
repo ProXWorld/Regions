@@ -101,12 +101,18 @@ public final class RegionMemberMenu extends PaginatedMenuContents<Pair<UUID, Reg
                         if (role == PlayerRole.OWNER) return;
 
                         if (type.isRightClick()) {
+                            //deleteEnderChest(target);
                             plugin.removePlayerToRegion(region, target);
                             render();
                         }
                     })
                     .build());
         });
+    }
+
+    private void deleteEnderChest(final @NonNull Player target) {
+        //if (!EcManager.playerHasChest(target)) return;
+
     }
 
     private @NonNull Optional<Profile> getProfileNameByCache(final @NonNull UUID uuid) {

@@ -7,16 +7,18 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
 
+import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.stream.IntStream;
 
 @UtilityClass
 public class CountablePermission {
     public void registerRange(String permissionPrefix, int min, int max) {
-        //Preconditions.checkState(min  < 1 || max < min, "Impossible range");
+        Preconditions.checkState(min < 1 || max > min, "Impossible range");
 
         IntStream.rangeClosed(min, max)
                 .mapToObj(i -> new Permission(permissionPrefix + "." + i))
+                .filter(permission -> Bukkit.getPluginManager().getPermission(permission.getName()) == null)
                 .forEach(Bukkit.getPluginManager()::addPermission);
 
         Bukkit.getPluginManager()
@@ -24,10 +26,12 @@ public class CountablePermission {
     }
 
     public void unRegisterRange(String permissionPrefix, int min, int max) {
-      //  Preconditions.checkState(min < 1 || max < min, "Impossible range");
+        Preconditions.checkState(min < 1 || max > min, "Impossible range");
 
         IntStream.rangeClosed(min, max)
                 .mapToObj(i -> permissionPrefix + "." + i)
+                .map(Bukkit.getPluginManager()::getPermission)
+                .filter(Objects::nonNull)
                 .forEach(Bukkit.getPluginManager()::removePermission);
         Bukkit.getPluginManager()
                 .removePermission(permissionPrefix + ".*");

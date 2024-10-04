@@ -1,11 +1,14 @@
 package net.proxworld.regions.logic;
 
 import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldguard.domains.DefaultDomain;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.val;
+import me.darkakyloff.addon.commands.ec.EcManager;
 import me.darkakyloff.api.utils.SoundUtils;
 import net.proxworld.regions.RegionPlugin;
 import net.proxworld.regions.config.GeneralConfig;
@@ -13,8 +16,7 @@ import net.proxworld.regions.event.PlayerAddMemberRequestEvent;
 import net.proxworld.regions.menu.RegionMemberMenu;
 import net.proxworld.regions.menu.RegionMenu;
 import net.proxworld.regions.model.result.CreateResult;
-import org.bukkit.Location;
-import org.bukkit.Material;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -23,6 +25,7 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 
@@ -111,7 +114,8 @@ public final class EventListener implements Listener {
         SoundUtils.playSuccessfulSound(target);
 
         generalConfig.findMessage("REGION_ADD_MEMBER_SUCCESS")
-                .ifPresent(msg -> msg.format("player", target.getName()).send(player));
+                .ifPresent(msg -> msg.format("player", target.getName())
+                        .send(player));
         generalConfig.findMessage("REGION_ADD_MEMBER_SUCCESS_TARGET")
                 .ifPresent(msg -> msg.format("id", region.getId())
                         .format("player", player.getName())
@@ -119,6 +123,9 @@ public final class EventListener implements Listener {
 
         RegionMemberMenu.open(plugin, player, region);
     }
+
+    private static final Particle.DustOptions DUST_OPTIONS
+            = new Particle.DustOptions(Color.fromRGB(241, 166, 33), 1);
 
     @EventHandler
     public void onPlaceRegion(final BlockPlaceEvent event) {
@@ -146,6 +153,17 @@ public final class EventListener implements Listener {
         }
 
         generalConfig.findRegionBlock(item).ifPresent(rgBlock -> {
+            val playerLimit = plugin.getGeneralConfig()
+                    .getLimitSettings().getLimit(player);
+            val regionsCount = plugin.getRegionCount(player);
+
+            if (regionsCount >= playerLimit) {
+                event.setCancelled(true);
+                generalConfig.findMessage("REGION_LIMIT_REACHED")
+                        .ifPresent(message -> message.send(player));
+                return;
+            }
+
             val regionName = generateRegionName(location);
             val result = plugin.createRegion(regionName, player, rgBlock, location);
 
@@ -163,22 +181,7 @@ public final class EventListener implements Listener {
                 return;
             }
 
-            val playerLimit = plugin.getGeneralConfig()
-                    .getLimitSettings().getLimit(player);
-            val regionsCount = plugin.getRegionCount(player);
-
-            if (regionsCount >= playerLimit) {
-                event.setCancelled(true);
-                generalConfig.findMessage("REGION_LIMIT_REACHED")
-                        .ifPresent(message -> message.send(player));
-                return;
-            }
-
             val centered = toCenter(location);
-
-            if (generalConfig.isLightningOnCreate()) {
-                block.getWorld().strikeLightningEffect(centered);
-            }
 
             block.setMetadata("antiBreak", new FixedMetadataValue(plugin, regionName));
 
@@ -197,54 +200,26 @@ public final class EventListener implements Listener {
                                     .getLines()
                     ));
 
+            playParticles(block);
+            SoundUtils.playSuccessfulSound(player);
+
             generalConfig.findMessage("REGION_CREATED")
                     .ifPresent(message -> message.send(player));
-
-            /*val future = plugin.getExecutor().withExtension(plugin.getDao(), (dao) -> {
-                val regionCount = dao.getRegionCount(player.getUniqueId().toString());
-
-                val limit = generalConfig.getLimitSettings().getLimit(player);
-                if (regionCount >= limit) return DaoResult.LIMIT_REACHED;
-
-                val result = dao.findRegionById(regionName);
-                if (result != null) return DaoResult.ALREADY_EXISTS;
-
-                val saveResult = dao.saveRegion(
-                        regionName, "",
-                        player.getUniqueId().toString(), player.getWorld().getName(),
-                        location.getBlockX(), location.getBlockY(), location.getBlockZ()
-                );
-
-
-
-                return DaoResult.OK;
-            }).exceptionally((t) -> DaoResult.FAILURE);
-
-            future.thenAccept(region -> {
-                if (region == null) return;
-
-                if (region == DaoResult.LIMIT_REACHED) {
-                    event.setCancelled(true);
-                    generalConfig.findMessage("REGION_LIMIT_REACHED")
-                            .ifPresent(message -> message.send(player));
-                    return;
-                }
-
-                if (region == DaoResult.ALREADY_EXISTS) {
-                    event.setCancelled(true);
-                    generalConfig.findMessage("REGION_ALREADY_EXISTS")
-                            .ifPresent(message -> message.send(player));
-                    return;
-                }
-
-                if (region == DaoResult.FAILURE) {
-                    event.setCancelled(true);
-                    generalConfig.findMessage("REGION_CREATE_ERROR")
-                            .ifPresent(message -> message.send(player));
-                    return;
-                }
-            }); */
         });
+    }
+
+    private void playParticles(
+            final @NonNull Block block
+    ) {
+        val world = block.getWorld();
+
+        val location = block.getLocation();
+
+        world.playEffect(location, Effect.STEP_SOUND, block.getType());
+        world.spawnParticle(Particle.REDSTONE, toCenter(location)
+                .clone().add(0, 1.5, 0), 1, DUST_OPTIONS);
+
+        // playing
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -279,17 +254,20 @@ public final class EventListener implements Listener {
             return;
         }
 
-        val region = regions.get(0);
+        ProtectedRegion protectedRegion = null;
 
-        if (!region.getOwners().contains(player.getUniqueId())) {
-            generalConfig.findMessage("REGION_NOT_OWNER")
-                    .ifPresent(message -> message.send(player));
-            SoundUtils.playErrorSound(player);
+        for (val region : regions) {
+            if (!region.getOwners().contains(player.getUniqueId())) {
+                generalConfig.findMessage("REGION_NOT_OWNER")
+                        .ifPresent(message -> message.send(player));
+                SoundUtils.playErrorSound(player);
+                return;
+            }
 
-            return;
+            protectedRegion = region;
         }
 
-        RegionMenu.create(player, region.getId(), region, plugin).open();
+        RegionMenu.create(player, protectedRegion.getId(), protectedRegion, plugin).open();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -337,31 +315,40 @@ public final class EventListener implements Listener {
         if (world == null) return;
         if (!generalConfig.getAllowedWorlds().contains(world.getName())) return;
 
-        checkExplode(event.blockList());
+        List<Block> blocks = new ArrayList<>(event.blockList());
+        event.blockList().clear();
+        event.blockList().addAll(checkExplode(blocks));
     }
 
-    private void checkExplode(final @NonNull List<Block> blocks) {
-        new ArrayList<>(blocks).forEach(block -> {
+    private @NonNull List<Block> checkExplode(final @NonNull List<Block> blocks) {
+        val remove = new ArrayList<>(blocks);
+
+        for (val block : blocks) {
             val type = block.getType();
 
-            if (!generalConfig.isRegionBlock(type)) return;
-            if (!block.hasMetadata("antiBreak")) return;
+            if (!generalConfig.isRegionBlock(type)) continue;
+            if (!block.hasMetadata("antiBreak")) continue;
 
-            generalConfig.findRegionBlock(type).ifPresent(rgBlock -> {
-                plugin.destroyRegion(block);
-                block.removeMetadata("antiBreak", plugin);
+            val opt = generalConfig.findRegionBlock(type);
+            if (opt.isEmpty()) continue;
 
-                val loc = block.getLocation();
+            val rgBlock = opt.get();
+            remove.remove(block);
+            if (!rgBlock.isExploding()) continue;
 
-                plugin.getHologramHook()
-                        .removeHologram(generateRegionName(loc));
+            plugin.destroyRegion(block);
+            block.removeMetadata("antiBreak", plugin);
 
-                block.setType(Material.AIR);
-                block.getWorld().dropItem(loc, rgBlock.getItem());
+            val loc = block.getLocation();
 
-                blocks.remove(block);
-            });
-        });
+            plugin.getHologramHook()
+                    .removeHologram(generateRegionName(loc));
+
+            block.setType(Material.AIR);
+            block.getWorld().dropItem(loc, rgBlock.getItem());
+        }
+
+        return remove;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -371,8 +358,9 @@ public final class EventListener implements Listener {
         if (!generalConfig.getAllowedWorlds().contains(world.getName())) return;
 
         // plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
-        val blocks = event.blockList();
-        checkExplode(blocks);
+        List<Block> blocks = new ArrayList<>(event.blockList());
+        event.blockList().clear();
+        event.blockList().addAll(checkExplode(blocks));
         // );
     }
 
@@ -381,11 +369,41 @@ public final class EventListener implements Listener {
         val block = event.getBlock();
 
         val type = block.getType();
+
         if (!generalConfig.isRegionBlock(type)) return;
         if (!block.hasMetadata("antiBreak")) return;
 
         val player = event.getPlayer();
         if (!generalConfig.getAllowedWorlds().contains(player.getWorld().getName())) return;
+
+        val regionManager = plugin.getRegionManagerByPlayer(player.getWorld());
+
+        val vector = BlockVector3.at(block.getX(), block.getY(), block.getZ());
+
+        val regions = regionManager.getApplicableRegions(vector)
+                .getRegions().stream()
+                .filter(region -> region.getId().startsWith("rg_"))
+                .toList();
+
+        event.setCancelled(true);
+
+        if (regions.isEmpty()) {
+            generalConfig.findMessage("REGION_NOT_IN_REGION")
+                    .ifPresent(message -> message.send(player));
+            SoundUtils.playErrorSound(player);
+
+            return;
+        }
+
+        for (val region : regions) {
+            if (!region.getOwners().contains(player.getUniqueId())) {
+                generalConfig.findMessage("REGION_NOT_OWNER")
+                        .ifPresent(message -> message.send(player));
+                SoundUtils.playErrorSound(player);
+
+                return;
+            }
+        }
 
         generalConfig.findRegionBlock(type).ifPresent(rgBlock -> {
             //plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -397,6 +415,17 @@ public final class EventListener implements Listener {
                 return;
             }
 
+            val world = block.getWorld();
+
+            for (val region : regions) {
+                actionEnderChest(world, region, region.getMembers());
+                actionEnderChest(world, region, region.getOwners());
+            }
+
+            event.setDropItems(false);
+            event.setCancelled(true);
+
+            block.setType(Material.AIR);
             block.removeMetadata("antiBreak", plugin);
 
             plugin.getHologramHook()
@@ -406,10 +435,59 @@ public final class EventListener implements Listener {
 
             plugin.removePlayerFromCache(player);
 
-            event.setDropItems(false);
             player.getInventory().addItem(rgBlock.getItem());
             //    });
         });
+    }
+
+    private void actionEnderChest(
+            final @NonNull World world, final @NonNull ProtectedRegion region, final @NonNull DefaultDomain domain
+    ) {
+        val uuids = domain.getUniqueIds();
+
+        for (val uuid : uuids) {
+            val enderChest = EcManager.chestsMap.get(uuid.toString());
+
+            if (enderChest != null) {
+                if (!enderChest.getWorld().getName()
+                        .equalsIgnoreCase(world.getName())) continue;
+
+                val blocks = getBlocks(
+                        world, region.getMinimumPoint(), region.getMaximumPoint()
+                );
+
+                for (val block : blocks) {
+                    val loc = block.getLocation();
+                    if (!loc.equals(enderChest)) continue;
+
+                    EcManager.breakChest(block);
+
+                    block.breakNaturally(new ItemStack(Material.ENDER_CHEST));
+
+                    val item = generalConfig.getEnderChestItem();
+
+                    if (item != null) {
+                        block.getWorld().dropItem(loc, generalConfig.getEnderChestItem());
+                    }
+                }
+            }
+        }
+    }
+
+    private @NonNull List<Block> getBlocks(
+            final @NonNull World world, final @NonNull BlockVector3 min, final @NonNull BlockVector3 max
+    ) {
+        val blocks = new ArrayList<Block>();
+
+        for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
+            for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
+                for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
+                    blocks.add(world.getBlockAt(x, y, z));
+                }
+            }
+        }
+
+        return blocks;
     }
 
     private @NonNull Location toCenter(final @NonNull Location location) {
